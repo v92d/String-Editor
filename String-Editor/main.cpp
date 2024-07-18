@@ -32,7 +32,7 @@ std::string GetProcessName(const std::wstring& filePath) {
     return std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(fs::path(filePath).filename().wstring());
 }
 
-void FindAndReplaceInFile(const std::wstring& filePath, const std::string& searchString, const std::string& replaceString) {
+void FindAndReplaceInFile(const std::wstring& filePath, const std::vector<std::pair<std::string, std::string>>& replacements) {
     std::ifstream fileIn(filePath, std::ios::binary);
     if (!fileIn.is_open()) {
         std::cerr << "Failed to open file: " << std::wstring_convert<std::codecvt_utf8<wchar_t>>().to_bytes(filePath) << std::endl;
@@ -42,10 +42,12 @@ void FindAndReplaceInFile(const std::wstring& filePath, const std::string& searc
     std::vector<char> buffer((std::istreambuf_iterator<char>(fileIn)), std::istreambuf_iterator<char>());
     fileIn.close();
 
-    auto it = std::search(buffer.begin(), buffer.end(), searchString.begin(), searchString.end());
-    while (it != buffer.end()) {
-        std::copy(replaceString.begin(), replaceString.end(), it);
-        it = std::search(it + replaceString.size(), buffer.end(), searchString.begin(), searchString.end());
+    for (const auto& [searchString, replaceString] : replacements) {
+        auto it = std::search(buffer.begin(), buffer.end(), searchString.begin(), searchString.end());
+        while (it != buffer.end()) {
+            std::copy(replaceString.begin(), replaceString.end(), it);
+            it = std::search(it + replaceString.size(), buffer.end(), searchString.begin(), searchString.end());
+        }
     }
 
     std::ofstream fileOut(filePath, std::ios::binary | std::ios::trunc);
@@ -79,7 +81,7 @@ std::wstring GetNewFileName() {
     return newFileName;
 }
 
-void SaveChangesToFile(const std::wstring& originalFilePath, const std::wstring& newFileName, const std::string& searchString, const std::string& replaceString) {
+void SaveChangesToFile(const std::wstring& originalFilePath, const std::wstring& newFileName, const std::vector<std::pair<std::string, std::string>>& replacements) {
     if (!IsValidFileName(newFileName)) {
         std::wcerr << L"Invalid file name: " << newFileName << std::endl;
         return;
@@ -92,7 +94,7 @@ void SaveChangesToFile(const std::wstring& originalFilePath, const std::wstring&
 
     fs::copy_file(originalFilePath, newFilePath, fs::copy_options::overwrite_existing);
 
-    FindAndReplaceInFile(newFilePath, searchString, replaceString);
+    FindAndReplaceInFile(newFilePath, replacements);
 
     std::wcout << L"File saved successfully." << std::endl;
 }
@@ -145,6 +147,7 @@ int main() {
         return 1;
     }
 
+    std::vector<std::pair<std::string, std::string>> replacements;
     std::string searchString;
     std::string replaceString;
     bool continueEditing = true;
@@ -156,9 +159,12 @@ int main() {
         std::cout << "Enter replacement string: ";
         std::getline(std::cin, replaceString);
 
+        replacements.push_back({ searchString, replaceString });
+
         std::wstring newFileName = GetNewFileName();
         if (!newFileName.empty()) {
-            SaveChangesToFile(filePath, newFileName, searchString, replaceString);
+            SaveChangesToFile(filePath, newFileName, replacements);
+            continueEditing = false;
         }
         else {
             std::cout << "Continuing without saving changes." << std::endl;
